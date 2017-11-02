@@ -57,12 +57,11 @@ logger.addHandler(ch)
 
 parser = argparse.ArgumentParser('media_from_yt')
 parser.add_argument('urls', type=str, nargs='*', help='url(s) or id(s) of youtube vids to be converted.')
-parser.add_argument('--output', '-o', type=str, help='base directory to save results into.')
-parser.add_argument('--extension', '--ext', '-e', type=str, default='mp3',
+parser.add_argument('--output', '-o', type=str, metavar='PATH', help='base directory to save results into.')
+parser.add_argument('--extension', '-e', type=str, metavar='EXT',default='mp3',
                     help='extension to use for file(s) to be created.'
                     )
-parser.add_argument('--bitrate', '-b', type=str, default='128k', help='desired bitrate to have exported file(s) in.')
-
+parser.add_argument('--bitrate', '-b', type=str, metavar='BR',default='128k', help='desired bitrate to have exported file(s) in.')
 parser.add_argument('--file', '-f', action='store_true',
                     help='flag that if set, treats urls as a file with a list of urls inside it (one per line)'
                     )
