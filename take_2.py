@@ -1,3 +1,6 @@
+#! /usr/bin/env python3
+# vim:fileencoding=utf-8
+# -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 import youtube_dl
 import re
