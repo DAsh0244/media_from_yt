@@ -127,25 +127,22 @@ track_exp = re.compile(r'^(?P<num>\d*)\.?\s*\W*(?P<title>.*[a-zA-z0-9]\)?)\s*(\(
 # ('Jakub Zytecki','Wishful Lotus Proof'),
 # ('Destiny Potato', 'LUN'),
 # ]
-#                               speshial chars | "full album stream[ing]"   | "full ep stream[ing]"   | "full album" | "full ep" 
+# speshial chars | "full album stream[ing]"   | "full ep stream[ing]"   | "full album" | "full ep" 
 # list(filter(None, re.split(r'[\[\]()/\|\-\s]+|full\s*album\s*stream[ing]?|full\s*ep\s*stream[ing]?|full\s*album|full\s*ep',albums[0],flags=re.IGNORECASE)))
 # ['Polyphia', 'Renaissance']
 album_exp = re.compile(r'(.*)', re.IGNORECASE)
 bad_exps = {'full album', 'full ep', 'streaming'  '-', ' ', '\t', '\n', '\r', '\x0b', '\x0c'}
 
 def filter_list(full_list, excludes=(None, '')):
-    s = set(excludes)
-    return (x for x in full_list if x not in s)
-
+    return (x for x in full_list if x not in set(excludes))
 
 def parse_track(track_dict):    
     track_dict.update(track_exp.match(track_dict['title']).groupdict())
     if not track_dict['num']:
         track_dict['num'] = num
-    
+
 def parse_album(info_dict):
-    base_set = re.split('\w|/- ', info['title'])
-    
+    base_set = re.split('\w|/- ', info['title'])    
     return album_exp.match(info['title']).group(1)
 
 if __name__ == '__main__':
