@@ -170,7 +170,7 @@ if __name__ == '__main__':
                 for item in dict:
                     print(item, dict[item], sep=': ')
                 print('')
-                # print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict), end='')
+                print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict), end='')
         except (TypeError, KeyError):
             print('no timestamp info')
         print('')
@@ -178,5 +178,4 @@ if __name__ == '__main__':
         print('format', info['ext'],sep=':')
         print('thumbnail', info['thumbnail'],sep=':')
         print(info.keys())
-        # ydl.download([sys.argv[1]])
         
