@@ -136,7 +136,7 @@ bad_exps = {'full album', 'full ep', 'streaming'  '-', ' ', '\t', '\n', '\r', '\
 def filter_list(full_list, excludes=(None, '')):
     return (x for x in full_list if x not in set(excludes))
 
-def parse_track(track_dict):    
+def parse_track(track_dict, num):    
     track_dict.update(track_exp.match(track_dict['title']).groupdict())
     if not track_dict['num']:
         track_dict['num'] = num
@@ -149,33 +149,33 @@ if __name__ == '__main__':
     import sys
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(sys.argv[1], download=False)
-        ydl.download([sys.argv[1]])
+        print(info['extractor_key'])
+        # ydl.download([sys.argv[1]])
         print('')
-        print(info)
+        # print(info)
         print('')
         print('title', info.get('title','N/A'),sep=':')
         print('creator', info.get('uploader',info.get('id','N/A')),sep=':') 
         try:
-            print('chapters:', end='')
             num = 0
             album = parse_album(info)
-            for dict in info.get('chapters', info.get('entries', [])):
+            key = 'chapters' if info.get('chapters', None) is not None else 'entries'
+            print(key,':', sep='', end='\n\n')
+            for dict in info.get(key, []):
                 num += 1
                 dict['album'] = album
-                # dict['num'], dict['title'] = parse_track.match(dict['title']).group(1,2)
-                parse_track(dict)
-                # dict.update(parse_track.match(dict['title']).groupdict())
-                # if not dict['num']:
-                    # dict['num'] = num
+                parse_track(dict,num)
                 for item in dict:
-                    print(item, dict[item], sep=': ')
+                    print(item, dict[item] if item not in ['url','http_headers','formats'] else 'LEN', sep=': ')
                 print('')
-                print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict), end='')
+                try:
+                    print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict), end='')
+                except:
+                    pass
         except (TypeError, KeyError):
             print('no timestamp info')
         print('')
-        print('bit_rate', info.get('abr',''),sep=':')
-        print('format', info['ext'],sep=':')
-        print('thumbnail', info['thumbnail'],sep=':')
-        print(info.keys())
-        
+        # print('bit_rate', info.get('abr','N/A'),sep=':')
+        # print('format', info.get('ext','N/A'),sep=':')
+        # print('thumbnail', info.get('thumbnail','N/A'),sep=':')
+        # print(info.keys())
