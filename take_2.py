@@ -4,25 +4,26 @@
 from __future__ import unicode_literals
 import youtube_dl
 import re
-
+import sys
 
 class MyLogger(object):
+    def __init__(self, level='debug', stderr=sys.stderr, stdout=sys.stdout):
+        self.level = level
+        self.stderr = stderr
+        self.stdout = stdout    
     def debug(self, msg):
-        pass
-
+        print('[debug]',msg)
     def warning(self, msg):
-        pass
-
+        print('[warning]',msg)
     def error(self, msg):
-        print(msg)
-
+        print('[error]',msg)
 
 def my_hook(d):
     if d['status'] == 'finished':
         print('Done downloading, now converting ...')
         print(d)
     else:
-        print('{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)))
+        self.stdout.write('\r{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)))
 
 
 ydl_opts = {
@@ -31,9 +32,10 @@ ydl_opts = {
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',
         'preferredcodec': 'mp3',
-        'preferredquality': '128',
+        'preferredquality': '2',
+        # 'preferredquality': '128k',
     }],
-    'logger': MyLogger(),
+    # 'logger': MyLogger(),
     'progress_hooks': [my_hook],
 }
 
@@ -103,33 +105,34 @@ track_exp = re.compile(r'^(?P<num>\d*)\.?\s*\W*(?P<title>.*[a-zA-z0-9]\)?)\s*(\(
 # regex to parse title and artist from title
 # 
 # albums = [
-# '(FULL ALBUM) Polyphia - Renaissance',
-# 'Sithu Aye - Invent The Universe - (Full Album)',
-# 'Sithu Aye - Cassini (5th Anniversary Remaster) || Full Album Stream',
-# 'Dorje - Centred and One [FULL EP]',
-# 'DJELMASH | CROSSROADS | FULL EP', 
-# 'David Maxim Micic | ECO | FULL ALBUM STREAMING',
-# 'David Maxim Micic - BILO 3.0 | FULL ALBUM STREAMING',
-# 'David Maxim Micic / Who Bit the Moon / FULL ALBUM 2017',
-# 'Jakub Zytecki : Wishful Lotus Proof [Full Album]',
-# 'Destiny Potato - 'LUN' | FULL ALBUM 2014',
+# r'(FULL ALBUM) Polyphia - Renaissance',
+# r'Sithu Aye - Invent The Universe - (Full Album)',
+# r'Sithu Aye - Cassini (5th Anniversary Remaster) || Full Album Stream',
+# r'Dorje - Centred and One [FULL EP]',
+# r'DJELMASH | CROSSROADS | FULL EP', 
+# r'David Maxim Micic | ECO | FULL ALBUM STREAMING',
+# r'David Maxim Micic - BILO 3.0 | FULL ALBUM STREAMING',
+# r'David Maxim Micic / Who Bit the Moon / FULL ALBUM 2017',
+# r'Jakub Zytecki : Wishful Lotus Proof [Full Album]',
+# r"Destiny Potato - 'LUN' | FULL ALBUM 2014",
 # ]
 # 
 # desired = [
 # ('Polyphia','Renaissance'),
-# ('Sithu Aye','Invent The Universe')',
-# ('Sithu Aye', 'Cassini (5th Anniversary Remaster)',
+# ('Sithu Aye','Invent The Universe'),
+# ('Sithu Aye', 'Cassini', '5th Anniversary Remaster'),
 # ('Dorje','Centred and One'),
-# ('DJELMASH', 'CROSSROADS'), 
+# ('DJELMASH', 'CROSSROADS'),
 # ('David Maxim Micic', 'ECO'),
 # ('David Maxim Micic', 'BILO 3.0'),
-# ('David Maxim Micic','Who Bit the Moon'),
+# ('David Maxim Micic','Who Bit the Moon', '2017'),
 # ('Jakub Zytecki','Wishful Lotus Proof'),
-# ('Destiny Potato', 'LUN'),
+# ('Destiny Potato', 'LUN', '2014'),
 # ]
-# speshial chars | "full album stream[ing]"   | "full ep stream[ing]"   | "full album" | "full ep" 
-# list(filter(None, re.split(r'[\[\]()/\|\-\s]+|full\s*album\s*stream[ing]?|full\s*ep\s*stream[ing]?|full\s*album|full\s*ep',albums[0],flags=re.IGNORECASE)))
-# ['Polyphia', 'Renaissance']
+# album_exp = re.compile(r'(?:\s\-\s|\s*[\[\]\|]\s*)+|full\s*album\s*stream[ing]?|full\s*ep\s*stream[ing]?|\(*full\s*album\)*\s*|full\s*ep', re.IGNORECASE)
+album_exp = re.compile(r'(?:(?:\s*[\(|\[]\s*)?full\s*(?:album|ep)(?:[\)|\]]\s*)?(?:\s*stream(?:ing)?)?)\s*|(?:\s*[\!-\-\/\|\:]\s*)', re.IGNORECASE)
+# parsed = [tuple(filter(None, album_exp.split(album))) for album in albums]
+
 album_exp = re.compile(r'(.*)', re.IGNORECASE)
 bad_exps = {'full album', 'full ep', 'streaming'  '-', ' ', '\t', '\n', '\r', '\x0b', '\x0c'}
 
@@ -142,7 +145,7 @@ def parse_track(track_dict, num):
         track_dict['num'] = num
 
 def parse_album(info_dict):
-    base_set = re.split('\w|/- ', info['title'])    
+    base_set = re.split('\w|/-\s+', info['title'])    
     return album_exp.match(info['title']).group(1)
 
 if __name__ == '__main__':
