@@ -3,32 +3,65 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 import youtube_dl
+from pydub import AudioSegment
+from mutagen.mp3 import EasyMP3 as MP3
 import re
 import sys
+import os.path as osp
+import os
+
+OUTPUTDIR = 'output'
 
 class MyLogger(object):
-    def __init__(self, level='debug', stderr=sys.stderr, stdout=sys.stdout):
-        self.level = level
-        self.stderr = stderr
-        self.stdout = stdout    
+    # def __init__(self, level='debug', stderr=sys.stderr, stdout=sys.stdout):
+        # self.level = level
+        # self.stderr = stderr
+        # self.stdout = stdout    
     def debug(self, msg):
-        print('[debug]',msg)
-    def warning(self, msg):
-        print('[warning]',msg)
-    def error(self, msg):
-        print('[error]',msg)
+        pass
+    warning = error = debug
+    # def debug(self, msg):
+        # print('[debug]',msg)
+    # def warning(self, msg):
+        # print('[warning]',msg)
+    # def error(self, msg):
+        # print('[error]',msg)
 
 def my_hook(d):
+    """
+    d will have keys:
+    
+    [downloading]
+    'status'
+    'downloaded_bytes'
+    'total_bytes'
+    'tmpfilename'
+    'filename'
+    'eta'
+    'speed'
+    'elapsed'
+    '_eta_str'
+    '_percent_str'
+    '_speed_str'
+    '_total_bytes_str'
+    
+    [finished]
+    'filename'
+    'status'
+    'total_bytes'
+    '_total_bytes_str'
+    """
     if d['status'] == 'finished':
-        print('Done downloading, now converting ...')
-        print(d)
+        print('\nDone downloading, now converting ...')
     else:
-        self.stdout.write('\r{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)))
+        # print(d.keys())
+        print('\r{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)),end='')
 
 
 ydl_opts = {
     'format': 'bestaudio/best',
-    'verbose': 'True',
+    # 'verbose': 'True',
+    # 'verbose': 'False',
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',
         'preferredcodec': 'mp3',
@@ -36,7 +69,7 @@ ydl_opts = {
         # 'preferredquality': '128k',
     }],
     # 'logger': MyLogger(),
-    'progress_hooks': [my_hook],
+    # 'progress_hooks': [my_hook],
 }
 
 
@@ -133,52 +166,149 @@ track_exp = re.compile(r'^(?P<num>\d*)\.?\s*\W*(?P<title>.*[a-zA-z0-9]\)?)\s*(\(
 album_exp = re.compile(r'(?:(?:\s*[\(|\[]\s*)?full\s*(?:album|ep)(?:[\)|\]]\s*)?(?:\s*stream(?:ing)?)?)\s*|(?:\s*[\!-\-\/\|\:]\s*)', re.IGNORECASE)
 # parsed = [tuple(filter(None, album_exp.split(album))) for album in albums]
 
-album_exp = re.compile(r'(.*)', re.IGNORECASE)
+# album_exp = re.compile(r'(.*)', re.IGNORECASE)
 bad_exps = {'full album', 'full ep', 'streaming'  '-', ' ', '\t', '\n', '\r', '\x0b', '\x0c'}
+
+def make_safe(name):
+    illegal_chars = frozenset('\/|:*?<>"\'')
+    return ''.join((char for char in name if char not in illegal_chars)).strip()
 
 def filter_list(full_list, excludes=(None, '')):
     return (x for x in full_list if x not in set(excludes))
 
 def parse_track(track_dict, num):    
-    track_dict.update(track_exp.match(track_dict['title']).groupdict())
-    if not track_dict['num']:
-        track_dict['num'] = num
+    # track_dict.update(track_exp.match(track_dict['title']).groupdict())
+    # if not track_dict['num']:
+    track_dict['num'] = num
 
 def parse_album(info_dict):
-    base_set = re.split('\w|/-\s+', info['title'])    
-    return album_exp.match(info['title']).group(1)
+    base_set = re.split('\w|/-\s+', info_dict['title'])
+    parsed_res = tuple(filter(None, album_exp.split(info_dict['title'])))
+    return parsed_res
 
+def fill_metadata(media_file,tag_dict):
+    accepted_keys = {"album",
+                     "bpm",
+                     "compilation",  # iTunes extension
+                     "composer",
+                     "copyright",
+                     "encodedby",
+                     "lyricist",
+                     "length",
+                     "media",
+                     "mood",
+                     "title",
+                     "version",
+                     "artist",
+                     "albumartist",
+                     "conductor",
+                     "arranger",
+                     "discnumber",
+                     "organization",
+                     "tracknumber",
+                     "author",
+                     "albumartistsort",  # iTunes extension
+                     "albumsort",
+                     "composersort",  # iTunes extension
+                     "artistsort",
+                     "titlesort",
+                     "isrc",
+                     "discsubtitle",
+                     "language",
+                     }
+    audio = MP3(media_file)
+    safe_dict = {key:val for key,val in tag_dict.items() if key in accepted_keys}
+    try:
+        safe_dict['tracknumber'] = str(tag_dict['num'])
+    except KeyError:
+        pass
+    # print(safe_dict)
+    audio.update(safe_dict)
+    audio.save()
+    
+def slice_chapters(origin_media,track_dict,quality='2'):
+    base,ext = osp.splitext(origin_media)
+    base = osp.dirname(base)
+    print('loading origin media...')
+    origin = AudioSegment.from_file(origin_media,ext[1:])
+    for chapter in track_dict.values():
+        # print(chapter)
+        path = osp.join(base,OUTPUTDIR,chapter['album'])
+        try:
+            os.makedirs(path)
+        except FileExistsError:
+            pass
+        track = '{0:02d}-{1}'.format(chapter['num'],chapter['title'])
+        try:
+            print('slicing:',track)
+        except UnicodeEncodeError:
+            print('slicing:', chapter['num'])
+        track_name = make_safe(track)
+        file_name = osp.join(path,track_name+ext)
+        time_frame = [chapter[val]*1000 for val in ['start_time','end_time']]
+        segment = origin[time_frame[0]:time_frame[1]]
+        try:
+            print('saving as {}'.format(file_name))
+        except UnicodeEncodeError:
+            print('saving file to {}'.format(path))
+        segment.export(file_name,format=ext[1:],parameters=["-q:a", quality])
+        print('populating metadata')
+        fill_metadata(file_name,chapter)
+        print('Done!\n')
+    
 if __name__ == '__main__':
-    import sys
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(sys.argv[1], download=False)
-        print(info['extractor_key'])
-        # ydl.download([sys.argv[1]])
+        # print(info['extractor_key'])
         print('')
-        # print(info)
-        print('')
+        # print(info.keys())
+        # print('')
         print('title', info.get('title','N/A'),sep=':')
         print('creator', info.get('uploader',info.get('id','N/A')),sep=':') 
+        print('bit_rate', info.get('abr','N/A'),sep=':')
+        print('format', info.get('ext','N/A'),sep=':')
         try:
+            track_dict = {}
             num = 0
-            album = parse_album(info)
+            album_info = parse_album(info)
+            if len(album_info) == 1:
+                album = album_info[0]
+            else:
+                album = album_info[1]
             key = 'chapters' if info.get('chapters', None) is not None else 'entries'
             print(key,':', sep='', end='\n\n')
             for dict in info.get(key, []):
                 num += 1
                 dict['album'] = album
-                parse_track(dict,num)
-                for item in dict:
-                    print(item, dict[item] if item not in ['url','http_headers','formats'] else 'LEN', sep=': ')
-                print('')
                 try:
-                    print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict), end='')
+                    dict['artist'] = info['uploader']
+                except KeyError:
+                    pass
+                parse_track(dict,num)
+                # for item in dict:
+                    # print(item, dict[item] if item not in ['url','http_headers','formats'] else 'LEN', sep=': ')
+                # print('')
+                try:
+                    print('\n\tnum:{num}\n\ttitle:{title}\n\tstart:{start_time}\n\tstop:{end_time}'.format(**dict))
                 except:
                     pass
+                track_dict[dict['title']] = dict
         except (TypeError, KeyError):
             print('no timestamp info')
-        print('')
-        # print('bit_rate', info.get('abr','N/A'),sep=':')
-        # print('format', info.get('ext','N/A'),sep=':')
-        # print('thumbnail', info.get('thumbnail','N/A'),sep=':')
-        # print(info.keys())
+        out_info = info
+        try:
+            out_info['ext'] = ydl_opts['postprocessors'][0]['preferredcodec']
+        except KeyError:
+            pass
+        outfile = ydl.prepare_filename(out_info)
+        print('starting dowload...')
+        ydl.download([sys.argv[1]])
+        print('Done!')
+        
+        # from pprint import pprint
+        # pprint(track_dict)
+        
+        print('slicing chapters from origin...')
+        # begin pydub chapter slicing:
+        slice_chapters(outfile,track_dict,ydl_opts['postprocessors'][0]['preferredquality'])
+        
