@@ -1,2 +1,7 @@
 *.old
-
+*.mp3
+*.webm
+/ref/*
+/output/*
+/test/*
+test_urls_chapter_slicing.txt
