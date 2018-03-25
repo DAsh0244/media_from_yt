@@ -111,16 +111,17 @@ def my_hook(d):
     '_total_bytes_str'
     """
     if d['status'] == 'finished':
-        print('\nDone downloading, now converting ...')
-    else:
-        # print(d.keys())
-        print('\r{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)),end='')
+        logger.warning('done downloading %s, applying any post-processing', d['filename'])
+    # else:
+        # # print(d.keys())
+        # print('\r{}:{} -- ({})'.format(d['filename'],round(d['downloaded_bytes']/d['total_bytes']*100,2), round(d['elapsed'],3)),end='')
 
 
 ydl_opts = {
     'format': 'bestaudio/best',
     # 'verbose': 'True',
     # 'verbose': 'False',
+    'quiet':'True',
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',
         'preferredcodec': 'mp3',
@@ -128,16 +129,19 @@ ydl_opts = {
         # 'preferredquality': '128k',
     }],
     # 'logger': MyLogger(),
-    # 'progress_hooks': [my_hook],
+    'progress_hooks': [my_hook],
 }
 
 
 # regex for parsing track titles -- see ref/regex_text.txt
-track_exp = re.compile(r'^(?P<num>\d*)\.?\s*\W*(?P<title>.*[a-zA-z0-9]\)?)\s*(\(\))?')
+track_exp = re.compile(r'^((?P<track>(\d*(?!\d*\:\d*)))|(?:\d*\W*\d*)|)'
+                                     r'\s*\W*\s*(?P<title>.*?(?=\(?\d+\:\d*\)?)|(.*))',re.I)
 
 # regex to parse title and artist from title -- see ref/regex_test.txt
-album_exp = re.compile(r'(?:(?:\s*[\(|\[]\s*)?full\s*(?:album|ep)(?:[\)|\]]\s*)?'
-                                       r'(?:\s*stream(?:ing)?)?)\s*|(?:\s*[\!-\-\/\|\:]\s*)', re.IGNORECASE)
+album_exp = re.compile(r'(?:(?:\s*[\(|\[]\s*)?full\s*(?:album|ep)(?:[\)|\]]\s*)?(?:\s*stream(?:ing)?)?)\s*'
+                                       r'|(?:\s*[\!-\-\/\|\:]\s*)'
+                                       r'|(?:\s\s+)', re.I)
+
 # parsed = [tuple(filter(None, album_exp.split(album))) for album in albums]
 
 bad_exps = {'full album', 'full ep', 'streaming'  '-', ' ', '\t', '\n', '\r', '\x0b', '\x0c'}
@@ -155,13 +159,16 @@ def make_safe(name):
 def filter_list(full_list, excludes=(None, '')):
     return (x for x in full_list if x not in set(excludes))
 
-def parse_track(track_dict, num):    
-    # track_dict.update(track_exp.match(track_dict['title']).groupdict())
-    # if not track_dict['num']:
-    track_dict['track'] = num
+def parse_track(track_dict, num): 
+    parsed_title_dict = track_exp.match(track_dict['title']).groupdict()
+    if parsed_title_dict['track'] is None:
+        parsed_title_dict['track'] = num
+    if parsed_title_dict['title'] is None:
+        parsed_title_dict['title'] = '{}: Track {}'.format(track_dict['title'],num)
+    track_dict.update(parsed_title_dict)
 
 def parse_album(info_dict):
-    base_set = re.split('\w|/-\s+', info_dict['title'])
+    base_set = re.split(album_exp, info_dict['title'])
     parsed_res = tuple(filter(None, album_exp.split(info_dict['title'])))
     return parsed_res
 
@@ -189,12 +196,12 @@ def slice_chapters(origin_media,track_list,quality='2',ext=None, add_metadata=Tr
     logger.info('loaded origin media %s',origin_media)
     for chapter in track_list:
         # print(chapter)
-        path = osp.join(base,OUTPUTDIR,chapter['album'])
+        path = osp.join(base,OUTPUTDIR,chapter['artist'],chapter['album'])
         try:
             os.makedirs(path)
         except FileExistsError:
             pass
-        track = '{0:02d}-{1}'.format(chapter['track'],chapter['title'])
+        track = '{0:02d}-{1}'.format(int(chapter['track']),chapter['title'])
         try:
             logger.info('slicing:%s',track)
         except UnicodeEncodeError:
@@ -219,8 +226,9 @@ def get_info(url,ydl_opts):
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         # print(info.keys(),end='\n\n')
+        # info['title'] = re.sub(r'\s+', ' ', info['title'])
         logger.info('title: %s', info.get('title','N/A'))
-        logger.info('creator: %s', info.get('uploader',info.get('id','N/A'))) 
+        logger.info('uploader/id: %s', info.get('uploader',info.get('id','N/A'))) 
         logger.debug('bit_rate: %s', info.get('abr','N/A'))
         logger.debug('format: %s', info.get('ext','N/A'))
         
@@ -238,7 +246,7 @@ def get_info(url,ydl_opts):
                 num += 1
                 chapter_dict['album'] = album
                 try:
-                    chapter_dict['artist'] = info['uploader']
+                    chapter_dict['artist'] = info['creator']
                 except KeyError:
                     logger.warning('no artist found')
                 parse_track(chapter_dict,num)
@@ -281,13 +289,14 @@ if __name__ == '__main__':
             logger.setLevel(logging.DEBUG)
             ch.setLevel(logging.DEBUG)
             ydl_opts['verbose']=  'True'
+            ydl_opts.pop('quiet')
         else:
             logger.setLevel(logging.INFO)
             ch.setLevel(logging.INFO)
     elif args.quiet:
+        # ydl_opts['quiet']=  'True'
         logger.setLevel(logging.CRITICAL)
         ch.setLevel(logging.CRITICAL)
-        ydl_opts['verbose']=  'False'
         if args.quiet > 3:
             logger.disabled = True
     quality = args.quality if not args.bitrate else args.bitrate
@@ -302,8 +311,10 @@ if __name__ == '__main__':
 
     for url in urls:
         if not url.startswith(COMMENT):
+            logger.warning('processing %s', url)
             info, track_list = get_info(url,ydl_opts)
             convert = True if not track_list else False  # delay conversion until slicing happens
+            logger.warning('downloading %s', info['title'])
             outfile, track_list = grab_file(url,ydl_opts,convert=convert, info=info, track_list=track_list)
             if track_list and PYDUB:
                 # begin pydub chapter slicing:
