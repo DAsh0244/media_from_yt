@@ -1,1 +1,1 @@
-ECHO is on.
+#this file is empty  
