@@ -5,3 +5,4 @@
 /output/*
 /test/*
 test_urls_chapter_slicing.txt
+/__pycache__/*
